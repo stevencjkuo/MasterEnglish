@@ -1,0 +1,7 @@
+{
+  "name": "EngVantage - AI English Vocabulary Master",
+  "description": "An interactive English learning platform for secondary school students featuring AI-powered word lists, high-quality TTS pronunciation, and smart quizzes.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
