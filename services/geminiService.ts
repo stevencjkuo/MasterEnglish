@@ -2,8 +2,6 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { StudentLevel, Word, QuizQuestion } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // Audio Helper: Decode base64 to Uint8Array
 function decodeBase64(base64: string): Uint8Array {
   const binaryString = atob(base64);
@@ -35,7 +33,9 @@ async function decodeAudioData(
 }
 
 export const geminiService = {
+  // Use gemini-3-flash-preview for basic text tasks
   async fetchWordsByLevel(level: StudentLevel, count: number = 10): Promise<Word[]> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: `Generate ${count} essential English vocabulary words for ${level} students. Include phonetic symbols, Chinese translation, a concise English definition, and one high-quality example sentence with its Chinese translation.`,
@@ -53,7 +53,7 @@ export const geminiService = {
               exampleSentence: { type: Type.STRING },
               exampleTranslation: { type: Type.STRING },
             },
-            required: ["word", "phonetic", "definition", "translation", "exampleSentence", "exampleTranslation"]
+            propertyOrdering: ["word", "phonetic", "definition", "translation", "exampleSentence", "exampleTranslation"]
           }
         }
       }
@@ -73,10 +73,12 @@ export const geminiService = {
     }
   },
 
+  // Use gemini-3-pro-preview for complex reasoning tasks like quiz generation
   async generateQuiz(words: Word[]): Promise<QuizQuestion[]> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const wordsList = words.map(w => w.word).join(', ');
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents: `Generate a vocabulary quiz for these words: ${wordsList}. For each word, create one multiple-choice question. The question can be about the meaning or a sentence completion. Provide 4 options for each.`,
       config: {
         responseMimeType: "application/json",
@@ -89,9 +91,9 @@ export const geminiService = {
               options: { type: Type.ARRAY, items: { type: Type.STRING } },
               correctAnswer: { type: Type.STRING },
               wordId: { type: Type.STRING, description: "The actual word this question is testing" },
-              type: { type: Type.STRING, enum: ["meaning", "completion"] }
+              type: { type: Type.STRING, description: "One of: meaning, completion" }
             },
-            required: ["question", "options", "correctAnswer", "wordId", "type"]
+            propertyOrdering: ["question", "options", "correctAnswer", "wordId", "type"]
           }
         }
       }
@@ -100,7 +102,9 @@ export const geminiService = {
     return JSON.parse(response.text || "[]");
   },
 
+  // Use gemini-2.5-flash-preview-tts for speech generation
   async playPronunciation(text: string): Promise<void> {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     try {
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",

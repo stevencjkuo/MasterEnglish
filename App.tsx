@@ -6,6 +6,7 @@ import WordCard from './components/WordCard';
 import Quiz from './components/Quiz';
 
 const App: React.FC = () => {
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const [level, setLevel] = useState<StudentLevel>(StudentLevel.JUNIOR);
   const [words, setWords] = useState<Word[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -21,21 +22,51 @@ const App: React.FC = () => {
     };
   });
 
+  const checkApiKey = useCallback(async () => {
+    // Rely on the pre-configured window.aistudio helper
+    if ((window as any).aistudio) {
+      const selected = await (window as any).aistudio.hasSelectedApiKey();
+      setHasApiKey(selected);
+    } else {
+      // If not in an environment with aistudio helper, assume key is in process.env
+      setHasApiKey(true);
+    }
+  }, []);
+
+  const handleConnectKey = async () => {
+    if ((window as any).aistudio) {
+      await (window as any).aistudio.openSelectKey();
+      // Proceed immediately as per race condition instructions: assume key selection was successful
+      setHasApiKey(true);
+    }
+  };
+
   const loadWords = useCallback(async (selectedLevel: StudentLevel) => {
+    if (!hasApiKey) return;
     setIsLoading(true);
     try {
       const newWords = await geminiService.fetchWordsByLevel(selectedLevel);
       setWords(newWords);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      // Reset key selection if the request fails with 404/Not Found
+      if (err?.message?.includes("Requested entity was not found")) {
+        setHasApiKey(false);
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [hasApiKey]);
 
   useEffect(() => {
-    loadWords(level);
-  }, [level, loadWords]);
+    checkApiKey();
+  }, [checkApiKey]);
+
+  useEffect(() => {
+    if (hasApiKey) {
+      loadWords(level);
+    }
+  }, [level, loadWords, hasApiKey]);
 
   useEffect(() => {
     localStorage.setItem('engvantage_stats', JSON.stringify(stats));
@@ -62,8 +93,11 @@ const App: React.FC = () => {
       const questions = await geminiService.generateQuiz(words);
       setQuizQuestions(questions);
       setIsQuizMode(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      if (err?.message?.includes("Requested entity was not found")) {
+        setHasApiKey(false);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -73,6 +107,36 @@ const App: React.FC = () => {
     alert(`Quiz Complete! You scored ${score} out of ${quizQuestions.length}.`);
     setIsQuizMode(false);
   };
+
+  // Setup / Connection Screen
+  if (hasApiKey === false) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+        <div className="max-w-md w-full bg-white rounded-3xl shadow-xl p-10 border border-slate-100 text-center">
+          <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-bold text-4xl shadow-xl shadow-indigo-200 mx-auto mb-8">
+            E
+          </div>
+          <h1 className="text-3xl font-extrabold text-slate-900 mb-4">Welcome to EngVantage</h1>
+          <p className="text-slate-500 mb-8 leading-relaxed">
+            To start your AI-powered English learning journey, please connect your Google Gemini API key.
+          </p>
+          <button 
+            onClick={handleConnectKey}
+            className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center space-x-3"
+          >
+            <span>Connect to Gemini AI</span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+            </svg>
+          </button>
+          <p className="mt-6 text-xs text-slate-400">
+            Requires a paid API key from a Google Cloud Project. 
+            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-indigo-500 underline ml-1">Learn more</a>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (isQuizMode) {
     return (
@@ -112,6 +176,10 @@ const App: React.FC = () => {
           </nav>
 
           <div className="flex items-center space-x-4">
+            <div className="hidden sm:flex items-center space-x-2 mr-4">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-xs font-bold text-slate-400 uppercase">AI Connected</span>
+            </div>
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-slate-400 uppercase">Total Words</p>
               <p className="text-lg font-bold text-indigo-600">{stats.totalWordsLearned}</p>
@@ -119,9 +187,19 @@ const App: React.FC = () => {
             <button 
               onClick={() => loadWords(level)}
               className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+              title="Refresh Word List"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+            </button>
+            <button 
+              onClick={handleConnectKey}
+              className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+              title="Change API Key"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
               </svg>
             </button>
           </div>
