@@ -1,7 +1,6 @@
 import { Type, Modality } from "@google/genai";
-import { StudentLevel, Word, QuizQuestion, TargetLanguage } from "../types";
+import { StudentLevel, Word, QuizQuestion, TargetLanguage } from "../types.ts";
 
-// 已更新為您的 Render 後端網址
 const RENDER_RELAY_URL = 'https://startulip.onrender.com';
 
 function decodeBase64(base64: string): Uint8Array {
@@ -13,7 +12,7 @@ function decodeBase64(base64: string): Uint8Array {
     }
     return bytes;
   } catch (e) {
-    console.error("Base64 decoding failed", e);
+    console.error("Base64 解碼失敗", e);
     return new Uint8Array();
   }
 }
@@ -41,21 +40,13 @@ async function callRelay(payload: any) {
   try {
     const response = await fetch(`${RENDER_RELAY_URL}/api/generate`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`中繼站錯誤 (${response.status}): ${errorText || response.statusText}`);
-    }
-    
+    if (!response.ok) throw new Error(`後端中繼站報錯: ${response.status}`);
     return await response.json();
   } catch (err) {
-    console.error("Fetch Relay Error:", err);
+    console.error("Fetch Relay 錯誤:", err);
     throw err;
   }
 }
@@ -88,7 +79,6 @@ export const geminiService = {
     try {
       const data = await callRelay(payload);
       const text = data.text || (data.candidates && data.candidates[0]?.content?.parts[0]?.text);
-      if (!text) throw new Error("後端未回傳有效的文字內容");
       const words = typeof text === 'string' ? JSON.parse(text) : text;
       return words.map((w: any, index: number) => ({
         ...w,
@@ -97,7 +87,7 @@ export const geminiService = {
         learned: false
       }));
     } catch (e) {
-      console.error("fetchWordsByLevel 失敗:", e);
+      console.error("單字抓取失敗:", e);
       return [];
     }
   },
@@ -106,7 +96,7 @@ export const geminiService = {
     const wordsList = words.map(w => w.word).join(', ');
     const payload = {
       model: 'gemini-3-flash-preview',
-      contents: `Generate a vocabulary quiz for these words: ${wordsList}. For each word, create one multiple-choice question. The question can be about the meaning or a sentence completion. Provide 4 options for each.`,
+      contents: `Generate a vocabulary quiz for these words: ${wordsList}. For each word, create one multiple-choice question.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -116,22 +106,18 @@ export const geminiService = {
             properties: {
               question: { type: Type.STRING },
               options: { type: Type.ARRAY, items: { type: Type.STRING } },
-              correctAnswer: { type: Type.STRING },
-              wordId: { type: Type.STRING },
-              type: { type: Type.STRING }
+              correctAnswer: { type: Type.STRING }
             },
             required: ["question", "options", "correctAnswer"]
           }
         }
       }
     };
-
     try {
       const data = await callRelay(payload);
       const text = data.text || (data.candidates && data.candidates[0]?.content?.parts[0]?.text);
       return typeof text === 'string' ? JSON.parse(text) : text;
     } catch (e) {
-      console.error("Quiz generation error", e);
       return [];
     }
   },
@@ -139,30 +125,26 @@ export const geminiService = {
   async playPronunciation(text: string, languageName: string = "English"): Promise<void> {
     const payload = {
       model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: `Pronounce this in ${languageName}: ${text}` }] }],
+      contents: [{ parts: [{ text: `Pronounce: ${text}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' },
-          },
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
         },
       },
     };
-
     try {
       const data = await callRelay(payload);
       const base64Audio = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || data.audioData;
       if (!base64Audio) return;
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      const audioData = decodeBase64(base64Audio);
-      const audioBuffer = await decodeAudioData(audioData, audioContext, 24000, 1);
+      const audioBuffer = await decodeAudioData(decodeBase64(base64Audio), audioContext, 24000, 1);
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(audioContext.destination);
       source.start();
-    } catch (error) {
-      console.error("TTS Relay Error:", error);
+    } catch (e) {
+      console.error("發音失敗");
     }
   }
 };
