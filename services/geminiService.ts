@@ -1,7 +1,7 @@
-
 import { Type, Modality } from "@google/genai";
-import { StudentLevel, Word, QuizQuestion, TargetLanguage } from "../types";
+import { StudentLevel, Word, QuizQuestion, TargetLanguage } from "../types.ts";
 
+// 已更新為您的 Render 後端網址
 const RENDER_RELAY_URL = 'https://startulip.onrender.com';
 
 function decodeBase64(base64: string): Uint8Array {
@@ -87,11 +87,8 @@ export const geminiService = {
 
     try {
       const data = await callRelay(payload);
-      // 根據你的後端回傳結構調整，通常是 data.text 或 data.candidates[0].content.parts[0].text
       const text = data.text || (data.candidates && data.candidates[0]?.content?.parts[0]?.text);
-      
       if (!text) throw new Error("後端未回傳有效的文字內容");
-      
       const words = typeof text === 'string' ? JSON.parse(text) : text;
       return words.map((w: any, index: number) => ({
         ...w,
@@ -156,16 +153,10 @@ export const geminiService = {
     try {
       const data = await callRelay(payload);
       const base64Audio = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || data.audioData;
-      
-      if (!base64Audio) {
-        console.warn("未收到語音數據");
-        return;
-      }
-
+      if (!base64Audio) return;
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       const audioData = decodeBase64(base64Audio);
       const audioBuffer = await decodeAudioData(audioData, audioContext, 24000, 1);
-
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(audioContext.destination);

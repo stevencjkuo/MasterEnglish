@@ -1,6 +1,7 @@
+
 import React from 'react';
-import ReactDOM from 'react-dom/'; // 注意這裡要加斜線，對應你的 importmap
-import App from './App.tsx';      // 瀏覽器環境下建議補上副檔名
+import ReactDOM from 'react-dom/client';
+import App from './App.tsx';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

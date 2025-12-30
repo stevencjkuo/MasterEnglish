@@ -10,18 +10,33 @@
     body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
   </style>
   <script type="importmap">
-  {
-    "imports": {
-      "react-dom/": "https://esm.sh/react-dom@19.2.3/",
-      "react/": "https://esm.sh/react@19.2.3/",
-      "react": "https://esm.sh/react@19.2.3/"
-    }
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "@google/genai": "https://esm.sh/@google/genai@0.2.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
   }
-  </script>
+}
+</script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script>
+    // 註冊 Babel 設定，確保能解析 TSX 語法
+    if (window.babel) {
+      babel.registerPreset('tsx-preset', {
+        presets: [
+          [babel.availablePresets['typescript'], { allExtensions: true, isTSX: true }],
+          [babel.availablePresets['react'], { runtime: 'automatic' }]
+        ]
+      });
+    }
+  </script>
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel" data-type="module" src="./src/index.tsx"></script>
+  <!-- 確保 src 指向根目錄的 index.tsx -->
+  <script type="text/babel" data-type="module" data-presets="tsx-preset" src="index.tsx"></script>
 </body>
 </html>
